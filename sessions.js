@@ -3,7 +3,7 @@ import { toDataURL } from 'qrcode';
 import fs from 'fs';
 import path from 'path';
 
-const SESSIONS_DIR = process.env.SESSIONS_DIR || '/var/data/sessions';
+const SESSIONS_DIR = process.env.SESSIONS_DIR || './sessions';
 const sessions = new Map();
 
 export function startSessions() {
