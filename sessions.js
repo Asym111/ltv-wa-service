@@ -2,6 +2,7 @@ import { makeWASocket, useMultiFileAuthState, DisconnectReason } from '@whiskeys
 import { toDataURL } from 'qrcode';
 import fs from 'fs';
 import path from 'path';
+import { HttpsProxyAgent } from 'https-proxy-agent';
 
 const SESSIONS_DIR = process.env.SESSIONS_DIR || '/var/data/sessions';
 const sessions = new Map();
@@ -31,9 +32,13 @@ async function createSession(tenantId) {
 
   const { state, saveCreds } = await useMultiFileAuthState(sessionDir);
 
+  const proxyUrl = process.env.PROXY_URL;
+  const agent = proxyUrl ? new HttpsProxyAgent(proxyUrl) : undefined;
+
   const sock = makeWASocket({
     auth: state,
     printQRInTerminal: false,
+    agent: agent,
   });
 
   let currentQR = null;
