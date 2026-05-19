@@ -32,11 +32,9 @@ export function startSessions() {
   }
   console.log(`Loaded ${sessions.size} sessions`);
 
-  // Если ни одной сессии нет — создаём default чтобы был QR
-  if (sessions.size === 0) {
-    console.log('No sessions found, creating default session for QR pairing');
-    createSession('default');
-  }
+  // НЕ создаём автоматически сессию "default" — это вызывало кросс-тенантную
+  // отправку сообщений. Сессии создаются только когда тенант явно запрашивает QR
+  // через эндпоинт /session/:tenantId/qr.
 }
 
 async function createSession(tenantId) {
