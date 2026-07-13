@@ -15,6 +15,12 @@ import { HttpsProxyAgent } from 'https-proxy-agent';
 const SESSIONS_DIR = process.env.SESSIONS_DIR || '/var/data/sessions';
 const sessions = new Map();
 
+// Счётчик циклов "QR показан, но не отсканирован" по каждому тенанту.
+// После MAX_QR_CYCLES неудачных циклов сессия останавливается,
+// чтобы не крутить вечный QR-цикл в логах и не жечь ресурсы.
+const qrCycles = new Map();
+const MAX_QR_CYCLES = 3;
+
 // Тихий логгер чтобы не засорять Render logs
 const logger = pino({ level: 'silent' });
 
@@ -92,11 +98,30 @@ async function createSession(tenantId) {
       console.log(`[${tenantId}] Connection closed. Code: ${statusCode}, reconnect: ${shouldReconnect}`);
 
       if (shouldReconnect) {
+        // Если устройство ещё НЕ спарено (QR так и не отсканировали) —
+        // считаем циклы и после MAX_QR_CYCLES останавливаемся.
+        const isPaired = !!state.creds?.me;
+        if (!isPaired) {
+          const cycles = (qrCycles.get(tenantId) || 0) + 1;
+          qrCycles.set(tenantId, cycles);
+          if (cycles >= MAX_QR_CYCLES) {
+            console.log(`[${tenantId}] QR не отсканирован после ${cycles} циклов — сессия остановлена. Запросите QR заново на вкладке «Подключение».`);
+            qrCycles.delete(tenantId);
+            sessions.delete(tenantId);
+            try {
+              fs.rmSync(sessionDir, { recursive: true, force: true });
+            } catch (e) {
+              console.error(`Error removing session dir:`, e.message);
+            }
+            return;
+          }
+        }
         // Увеличенная задержка чтобы не банило за частые попытки
         setTimeout(() => createSession(tenantId), 10000);
       } else {
         console.log(`[${tenantId}] Logged out, removing session`);
         sessions.delete(tenantId);
+        qrCycles.delete(tenantId);
         try {
           fs.rmSync(sessionDir, { recursive: true, force: true });
         } catch (e) {
@@ -106,6 +131,7 @@ async function createSession(tenantId) {
     } else if (connection === 'open') {
       console.log(`[${tenantId}] ✅ Connected successfully`);
       currentQR = null;
+      qrCycles.delete(tenantId);
     } else if (connection === 'connecting') {
       console.log(`[${tenantId}] Connecting...`);
     }
@@ -162,6 +188,7 @@ export async function logoutSession(tenantId) {
       console.error(`Logout error for ${tenantId}:`, e.message);
     }
     sessions.delete(tenantId);
+    qrCycles.delete(tenantId);
     try {
       fs.rmSync(session.dir, { recursive: true, force: true });
     } catch (e) {
