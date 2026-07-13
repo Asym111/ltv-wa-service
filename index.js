@@ -1,5 +1,5 @@
 import express from 'express';
-import { startSessions, getSessionStatus, getQR, logoutSession } from './sessions.js';
+import { startSessions, getSessionStatus, getQR, logoutSession, getSession } from './sessions.js';
 
 const app = express();
 app.use(express.json());
@@ -34,8 +34,13 @@ app.post('/send', auth, async (req, res) => {
     return res.status(400).json({ error: 'tenantId, phone, message required' });
   }
   try {
-    const { getSession } = await import('./sessions.js');
     const session = await getSession(tenantId);
+    // Живое соединение имеет session.user — иначе сессия мертва/отвязана
+    if (!session || !session.user) {
+      return res.status(503).json({
+        error: 'WhatsApp не подключён — сессия неактивна, отсканируйте QR на вкладке «Подключение»',
+      });
+    }
     const jid = phone.includes('@s.whatsapp.net') ? phone : `${phone}@s.whatsapp.net`;
     await session.sendMessage(jid, { text: message });
     res.json({ success: true });
